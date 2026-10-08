@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clientes - CyC</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>CyC - Clientes y Fiado</h1>
+    <nav>
+      <a href="/">Venta</a>
+      <a href="/static/productos.html">Productos</a>
+      <a href="/static/clientes.html" class="activo">Clientes</a>
+      <a href="/static/inventario.html">Inventario</a>
+      <a href="/static/caja.html">Caja</a>
+      <a href="/static/reportes.html">Reportes</a>
+      <a href="/static/historial.html">Historial</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Nuevo cliente</h2>
+      <div class="form-fila">
+        <input id="cli-nombre" placeholder="Nombre">
+        <select id="cli-tipo">
+          <option value="estudiante">Estudiante</option>
+          <option value="profesor">Profesor</option>
+        </select>
+        <input id="cli-curso" placeholder="Curso / sección (ej. 3°B)">
+        <input id="cli-telefono" placeholder="Teléfono (opcional)">
+        <button id="btn-cli-guardar">Agregar</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Clientes</h2>
+      <div class="form-fila" style="margin-bottom: 12px;">
+        <input id="buscador" class="buscador-cliente" placeholder="Buscar por nombre o curso...">
+        <label style="display: flex; gap: 6px; align-items: center; white-space: nowrap;">
+          <input type="checkbox" id="chk-inactivos"> Ver inactivos
+        </label>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Cliente</th><th>Tipo</th><th>Curso</th><th>Saldo</th><th></th></tr>
+        </thead>
+        <tbody id="tabla-clientes"></tbody>
+      </table>
+      <button id="btn-mas-clientes" class="ver-mas" hidden></button>
+      <p id="tabla-vacia" class="vacio" hidden>No hay clientes cargados.</p>
+    </div>
+  </main>
+  <div id="modal"></div>
+  <div id="toast" class="toast"></div>
+  <script src="/static/clientes.js"></script>
+</body>
+</html>

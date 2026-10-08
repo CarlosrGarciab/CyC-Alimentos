@@ -1,0 +1,15 @@
+# Base de datos (datos reales de la cantina) y backups
+data/
+
+# Imágenes subidas por el usuario
+static/uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Logs
+*.log

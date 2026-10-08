@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reportes - CyC</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>CyC - Reportes</h1>
+    <nav>
+      <a href="/">Venta</a>
+      <a href="/static/productos.html">Productos</a>
+      <a href="/static/clientes.html">Clientes</a>
+      <a href="/static/inventario.html">Inventario</a>
+      <a href="/static/caja.html">Caja</a>
+      <a href="/static/reportes.html" class="activo">Reportes</a>
+      <a href="/static/historial.html">Historial</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <div class="form-fila">
+        <div class="tabs" id="tabs-rango" style="margin-bottom: 0;">
+          <button class="tab" data-rango="hoy">Hoy</button>
+          <button class="tab activo" data-rango="7">7 días</button>
+          <button class="tab" data-rango="30">30 días</button>
+          <button class="tab" data-rango="custom">Personalizado</button>
+        </div>
+      </div>
+      <div class="form-fila" id="fechas-custom" hidden style="margin-top: 10px;">
+        <label style="font-size: 0.85rem; color: var(--muted);">Desde
+          <input type="date" id="fecha-desde">
+        </label>
+        <label style="font-size: 0.85rem; color: var(--muted);">Hasta
+          <input type="date" id="fecha-hasta">
+        </label>
+        <button id="btn-aplicar">Aplicar</button>
+      </div>
+      <p id="rango-info" style="color: var(--muted); font-size: 0.85rem; margin-bottom: 0;"></p>
+    </div>
+    <div class="card">
+      <h2>Resumen</h2>
+      <div class="resumen-grid">
+        <div class="resumen-item">
+          <span class="resumen-label">Total vendido</span>
+          <span class="resumen-valor" id="k-total">—</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-label">Cantidad de ventas</span>
+          <span class="resumen-valor" id="k-cantidad">—</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-label">Ticket promedio</span>
+          <span class="resumen-valor" id="k-ticket">—</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-label">Unidades vendidas</span>
+          <span class="resumen-valor" id="k-unidades">—</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-label">Fiado generado</span>
+          <span class="resumen-valor" id="k-fiado">—</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-label">Cobros de fiado</span>
+          <span class="resumen-valor" id="k-cobros">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Ventas por día</h2>
+      <div class="chart-contenedor"><canvas id="chart-dias"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Productos más vendidos (unidades)</h2>
+      <div class="chart-contenedor"><canvas id="chart-productos"></canvas></div>
+      <p id="productos-vacio" class="vacio" hidden>No hay ventas en este rango.</p>
+    </div>
+    <div class="dos-columnas">
+      <div class="card">
+        <h2>Ventas por categoría</h2>
+        <div class="chart-contenedor chart-circulo"><canvas id="chart-categorias"></canvas></div>
+        <p id="categorias-vacio" class="vacio" hidden>No hay ventas en este rango.</p>
+      </div>
+      <div class="card">
+        <h2>Horas pico</h2>
+        <div class="chart-contenedor"><canvas id="chart-horas"></canvas></div>
+      </div>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="/static/chart.umd.min.js"></script>
+  <script src="/static/reportes.js"></script>
+</body>
+</html>

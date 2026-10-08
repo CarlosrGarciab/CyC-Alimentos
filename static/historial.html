@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Historial - CyC</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>CyC - Historial</h1>
+    <nav>
+      <a href="/">Venta</a>
+      <a href="/static/productos.html">Productos</a>
+      <a href="/static/clientes.html">Clientes</a>
+      <a href="/static/inventario.html">Inventario</a>
+      <a href="/static/caja.html">Caja</a>
+      <a href="/static/reportes.html">Reportes</a>
+      <a href="/static/historial.html" class="activo">Historial</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="form-fila" style="justify-content: space-between; align-items: flex-start;">
+        <div class="tabs" id="tabs-tipo" style="margin-bottom: 0;">
+          <button class="tab activo" data-tipo="ventas">Ventas</button>
+          <button class="tab" data-tipo="compras">Compras</button>
+        </div>
+        <div class="tabs" id="tabs-rango" style="margin-bottom: 0;">
+          <button class="tab" data-rango="hoy">Hoy</button>
+          <button class="tab activo" data-rango="30">30 días</button>
+          <button class="tab" data-rango="todo">Todo</button>
+          <button class="tab" data-rango="custom">Personalizado</button>
+        </div>
+      </div>
+      <div class="form-fila" id="fechas-custom" hidden style="margin-top: 10px;">
+        <label style="font-size: 0.85rem; color: var(--muted);">Desde
+          <input type="date" id="fecha-desde">
+        </label>
+        <label style="font-size: 0.85rem; color: var(--muted);">Hasta
+          <input type="date" id="fecha-hasta">
+        </label>
+        <button id="btn-aplicar">Aplicar</button>
+      </div>
+      <p id="resumen-info" style="color: var(--muted); font-size: 0.85rem; margin: 10px 0 0;"></p>
+    </div>
+
+    <div class="card">
+      <h2 id="titulo-lista">Últimas ventas</h2>
+      <div id="lista-historial"></div>
+      <p id="historial-vacio" class="vacio" hidden>No hay movimientos en este rango.</p>
+      <button id="btn-mas-historial" class="ver-mas" hidden></button>
+    </div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="/static/historial.js"></script>
+</body>
+</html>

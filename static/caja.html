@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caja - CyC</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>CyC - Caja</h1>
+    <nav>
+      <a href="/">Venta</a>
+      <a href="/static/productos.html">Productos</a>
+      <a href="/static/clientes.html">Clientes</a>
+      <a href="/static/inventario.html">Inventario</a>
+      <a href="/static/caja.html" class="activo">Caja</a>
+      <a href="/static/reportes.html">Reportes</a>
+      <a href="/static/historial.html">Historial</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <h2 id="caja-fecha">Resumen del día</h2>
+      <div class="resumen-grid">
+        <div class="resumen-item">
+          <span class="resumen-label">Ventas en efectivo</span>
+          <span class="resumen-valor" id="r-ventas-efectivo">—</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-label">Ventas a fiado</span>
+          <span class="resumen-valor" id="r-ventas-fiado">—</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-label">Cobros de fiado</span>
+          <span class="resumen-valor" id="r-cobros-fiado">—</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-label">Compras realizadas</span>
+          <span class="resumen-valor" id="r-compras">—</span>
+        </div>
+      </div>
+      <p id="r-cierre-info" class="vacio" hidden></p>
+    </div>
+    <div class="card">
+      <h2>Arqueo y cierre</h2>
+      <div class="form-fila">
+        <label class="campo-arqueo">Fondo inicial
+          <input id="fondo-inicial" type="number" min="0" step="0.01" placeholder="0">
+        </label>
+        <label class="campo-arqueo">Efectivo contado
+          <input id="efectivo-contado" type="number" min="0" step="0.01" placeholder="0">
+        </label>
+        <label class="campo-arqueo">Notas
+          <input id="notas-cierre" placeholder="Opcional">
+        </label>
+      </div>
+      <div class="arqueo-linea">
+        <span>Total esperado en caja</span>
+        <strong id="total-esperado">0</strong>
+      </div>
+      <div class="arqueo-linea">
+        <span>Diferencia</span>
+        <strong id="diferencia">—</strong>
+      </div>
+      <button id="btn-cerrar-caja" class="btn-cobrar" style="max-width: 280px;">Cerrar caja del día</button>
+    </div>
+    <div class="card">
+      <h2>Cierres anteriores</h2>
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Ventas efectivo</th><th>Fiado</th><th>Cobros</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr>
+        </thead>
+        <tbody id="tabla-cierres"></tbody>
+      </table>
+      <button id="btn-mas-cierres" class="ver-mas" hidden></button>
+      <p id="cierres-vacio" class="vacio" hidden>Todavía no hay cierres registrados.</p>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="/static/caja.js"></script>
+</body>
+</html>

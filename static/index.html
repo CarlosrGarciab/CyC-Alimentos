@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Venta - CyC</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>CyC - Venta</h1>
+    <nav>
+      <a href="/" class="activo">Venta</a>
+      <a href="/static/productos.html">Productos</a>
+      <a href="/static/clientes.html">Clientes</a>
+      <a href="/static/inventario.html">Inventario</a>
+      <a href="/static/caja.html">Caja</a>
+      <a href="/static/reportes.html">Reportes</a>
+      <a href="/static/historial.html">Historial</a>
+    </nav>
+  </header>
+  <main>
+    <div class="venta-layout">
+      <section class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <h2 style="margin: 0;">Productos</h2>
+          <label class="switch-rapido">
+            <input type="checkbox" id="chk-rapido">
+            <span>Venta rápida (un clic = venta)</span>
+          </label>
+        </div>
+        <div id="tabs" class="tabs" style="margin-top: 10px;"></div>
+        <input id="buscador" type="search" placeholder="Buscar producto..." style="width: 100%; margin-bottom: 12px;">
+        <div id="grid-productos" class="grid-productos"></div>
+        <p id="grid-vacio" class="vacio" hidden>No hay productos en esta categoría.</p>
+        <button id="btn-mas-productos" class="ver-mas" hidden></button>
+      </section>
+      <aside>
+        <div class="card">
+          <h2>Venta actual</h2>
+          <div id="carrito"></div>
+          <div class="carrito-total">
+            <span>Total</span>
+            <span id="total">0</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button id="btn-cobrar" class="btn-cobrar" disabled>Cobrar en efectivo</button>
+            <button id="btn-fiado" class="btn-fiado" disabled>Fiado</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Últimas ventas de hoy</h2>
+          <div id="historial"></div>
+          <button id="btn-mas-ventas" class="ver-mas" hidden></button>
+        </div>
+      </aside>
+    </div>
+  </main>
+  <div id="modal"></div>
+  <div id="toast" class="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

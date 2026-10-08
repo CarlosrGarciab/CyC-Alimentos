@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Productos - CyC</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>CyC - Productos</h1>
+    <nav>
+      <a href="/">Venta</a>
+      <a href="/static/productos.html" class="activo">Productos</a>
+      <a href="/static/clientes.html">Clientes</a>
+      <a href="/static/inventario.html">Inventario</a>
+      <a href="/static/caja.html">Caja</a>
+      <a href="/static/reportes.html">Reportes</a>
+      <a href="/static/historial.html">Historial</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Categorías</h2>
+      <div class="form-fila">
+        <input id="cat-nombre" placeholder="Nueva categoría (ej. Bebidas)">
+        <button id="btn-cat-guardar">Agregar</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Nombre</th><th>Estado</th><th></th></tr>
+        </thead>
+        <tbody id="tabla-categorias"></tbody>
+      </table>
+      <button id="btn-mas-cat-tabla" class="ver-mas" hidden></button>
+    </div>
+    <div class="card">
+      <h2>Productos</h2>
+      <div class="form-fila">
+        <div class="foto-preview" id="foto-preview-crear" hidden>
+          <img id="img-preview-crear" alt="Vista previa">
+        </div>
+        <button type="button" class="secundario" id="btn-foto-crear">Elegir foto</button>
+        <button type="button" class="secundario" id="btn-foto-crear-quitar" hidden>Quitar foto</button>
+        <input id="prod-nombre" placeholder="Nombre">
+        <select id="prod-categoria"></select>
+        <select id="prod-proveedor"><option value="">Sin proveedor</option></select>
+        <input id="prod-precio" type="number" min="0" step="0.01" placeholder="Precio ($)">
+        <input id="prod-stock" type="number" min="0" placeholder="Stock inicial">
+        <input id="prod-stock-min" type="number" min="0" placeholder="Stock mínimo">
+        <button id="btn-prod-guardar">Agregar</button>
+      </div>
+      <input id="prod-buscador" type="search" placeholder="Buscar producto por nombre o categoría..." style="width: 100%; margin: 18px 0 10px;">
+      <table>
+        <thead>
+          <tr><th>Producto</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Estado</th><th></th></tr>
+        </thead>
+        <tbody id="tabla-productos"></tbody>
+      </table>
+      <button id="btn-mas-prod-tabla" class="ver-mas" hidden></button>
+    </div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <input type="file" id="input-imagen" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+  <script src="/static/productos.js"></script>
+</body>
+</html>

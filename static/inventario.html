@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventario - CyC</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>CyC - Inventario</h1>
+    <nav>
+      <a href="/">Venta</a>
+      <a href="/static/productos.html">Productos</a>
+      <a href="/static/clientes.html">Clientes</a>
+      <a href="/static/inventario.html" class="activo">Inventario</a>
+      <a href="/static/caja.html">Caja</a>
+      <a href="/static/reportes.html">Reportes</a>
+      <a href="/static/historial.html">Historial</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Registrar compra</h2>
+      <div class="form-fila">
+        <select id="compra-proveedor"></select>
+        <input id="compra-notas" placeholder="Notas (opcional)">
+      </div>
+      <div id="items-compra"></div>
+      <div class="form-fila" style="margin-top: 10px;">
+        <button type="button" class="secundario" id="btn-agregar-item">+ Agregar producto</button>
+      </div>
+      <div class="carrito-total">
+        <span>Total compra</span>
+        <span id="compra-total">0</span>
+      </div>
+      <button id="btn-guardar-compra">Guardar compra</button>
+    </div>
+    <div class="card">
+      <h2>Stock actual</h2>
+      <input id="inv-buscador" type="search" placeholder="Buscar por producto, categoría o estado..." style="width: 100%; margin-bottom: 10px;">
+      <table>
+        <thead>
+          <tr><th>Producto</th><th>Categoría</th><th>Stock</th><th>Mínimo</th><th>Último costo</th><th>Estado</th></tr>
+        </thead>
+        <tbody id="tabla-inventario"></tbody>
+      </table>
+      <button id="btn-mas-inv" class="ver-mas" hidden></button>
+    </div>
+    <div class="card">
+      <h2>Proveedores</h2>
+      <div class="form-fila">
+        <input id="prov-nombre" placeholder="Nombre del proveedor">
+        <input id="prov-telefono" placeholder="Teléfono (opcional)">
+        <button id="btn-prov-guardar">Agregar</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Nombre</th><th>Teléfono</th><th>Estado</th><th></th></tr>
+        </thead>
+        <tbody id="tabla-proveedores"></tbody>
+      </table>
+      <button id="btn-mas-prov" class="ver-mas" hidden></button>
+    </div>
+    <div class="card">
+      <h2>Últimas compras</h2>
+      <div id="historial-compras"></div>
+      <button id="btn-mas-compras" class="ver-mas" hidden></button>
+    </div>
+  </main>
+  <div id="modal"></div>
+  <div id="toast" class="toast"></div>
+  <script src="/static/inventario.js"></script>
+</body>
+</html>
