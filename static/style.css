@@ -138,6 +138,7 @@ input, select { max-width: 100%; }
 .badge.inactivo { background: #fee2e2; color: #991b1b; }
 
 .form-fila { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+#fechas-custom { align-items: flex-end; }
 .form-fila input, .form-fila select { flex: 1; min-width: 140px; }
 
 .foto-preview {
