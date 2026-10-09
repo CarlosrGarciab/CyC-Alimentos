@@ -29,7 +29,7 @@ async function api(url, options = {}) {
 }
 
 function fmtPrecio(n) {
-  return MONEDA + " " + Number(n).toLocaleString("es", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return MONEDA + " " + Number(n ?? 0).toLocaleString("es", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 function btnAccion(texto, clase, onClick) {
@@ -129,9 +129,25 @@ async function cargarClientes() {
     tdCurso.textContent = c.curso || "—";
 
     const tdSaldo = document.createElement("td");
-    if (c.saldo_pendiente > 0.001) {
+    const esProfesor = c.tipo === "profesor";
+    const debe = Number(c.saldo_pendiente || 0) > 0.001;
+    const favor = Number(c.saldo_favor || 0) > 0.001;
+    if (esProfesor) {
+      tdSaldo.className = "saldo-ok";
+      tdSaldo.textContent = "—";
+    } else if (debe) {
       tdSaldo.className = "saldo-debe";
       tdSaldo.textContent = `Debe ${fmtPrecio(c.saldo_pendiente)}`;
+      if (favor) {
+        const extra = document.createElement("div");
+        extra.className = "saldo-ok";
+        extra.style.fontSize = "0.8rem";
+        extra.textContent = `A favor ${fmtPrecio(c.saldo_favor)}`;
+        tdSaldo.appendChild(extra);
+      }
+    } else if (favor) {
+      tdSaldo.className = "saldo-ok";
+      tdSaldo.textContent = `A favor ${fmtPrecio(c.saldo_favor)}`;
     } else {
       tdSaldo.className = "saldo-ok";
       tdSaldo.textContent = "Al día";
@@ -141,6 +157,9 @@ async function cargarClientes() {
     tdAcc.className = "celda-acciones";
     if (c.saldo_pendiente > 0.001) {
       tdAcc.append(btnAccion("Cobrar", "", () => modalCobrar(c)));
+    }
+    if (!esProfesor) {
+      tdAcc.append(btnAccion("+ Saldo", "", () => modalCargarSaldo(c)));
     }
     tdAcc.append(
       btnAccion("Historial", "secundario", () => modalHistorial(c.id)),
@@ -286,49 +305,154 @@ function modalCobrar(c) {
   });
 }
 
+// ---------- Saldo a favor ----------
+
+function modalCargarSaldo(c) {
+  abrirModal(`Cargar saldo a favor: ${c.nombre}`, (cuerpo, acciones) => {
+    const info = document.createElement("p");
+    info.style.marginTop = "0";
+    info.innerHTML = `Saldo actual: <strong class="saldo-ok">${fmtPrecio(c.saldo_favor)}</strong>`;
+    cuerpo.appendChild(info);
+
+    const monto = campoForm("Monto a cargar", "number", "");
+    monto.input.placeholder = "ej. 100000";
+    cuerpo.appendChild(monto.wrap);
+
+    const desc = campoForm("Descripción (opcional)", "text", "", {
+      placeholder: "ej. Papá de Juan - mes de julio",
+    });
+    cuerpo.appendChild(desc.wrap);
+
+    acciones.append(
+      btnAccion("Cancelar", "secundario", cerrarModal),
+      btnAccion("Cargar saldo", "", async () => {
+        const valor = Number(monto.input.value);
+        if (!(valor > 0)) return toast("Escribe un monto válido", "error");
+        try {
+          const r = await api(`/api/clientes/${c.id}/saldo`, {
+            method: "POST",
+            body: JSON.stringify({ monto: valor, descripcion: desc.input.value.trim() || null }),
+          });
+          cerrarModal();
+          toast(`Saldo cargado. Nuevo saldo: ${fmtPrecio(r.saldo_favor)}`);
+          await cargarClientes();
+        } catch (e) {
+          toast(e.message, "error");
+        }
+      })
+    );
+    monto.input.focus();
+  });
+}
+
 // ---------- Historial ----------
 
-async function modalHistorial(clienteId) {
-  const data = await api(`/api/clientes/${clienteId}/movimientos`);
-  abrirModal(`Historial: ${data.cliente.nombre}`, (cuerpo) => {
-    if (!data.movimientos.length) {
-      cuerpo.innerHTML = `<p class="vacio">Todavía no tiene movimientos.</p>`;
-      return;
-    }
-    for (const d of data.movimientos.slice().reverse()) {
-      const box = document.createElement("div");
-      box.className = "detalle-mov";
-      const fecha = d.creado_en.slice(0, 16).replace("T", " ");
-      const titulo = document.createElement("div");
-      titulo.className = "titulo";
-      titulo.textContent = `Deuda #${d.id} · ${fecha}`;
-      box.appendChild(titulo);
+function modalHistorial(clienteId) {
+  abrirModal("Historial", (cuerpo) => {
+    cuerpo.innerHTML = `<p class="vacio">Cargando...</p>`;
+    (async () => {
+      try {
+        const [data, saldoData] = await Promise.all([
+          api(`/api/clientes/${clienteId}/movimientos`),
+          api(`/api/clientes/${clienteId}/saldo`),
+        ]);
+        const titulo = $modal.querySelector(".modal h3");
+        if (titulo) titulo.textContent = `Historial: ${data.cliente.nombre}`;
+        cuerpo.innerHTML = "";
 
-      const total = document.createElement("div");
-      total.className = "fila-mov";
-      total.innerHTML = `<span>Dejó fiado</span><span>${fmtPrecio(d.total)}</span>`;
-      box.appendChild(total);
+        const tieneDeudas = data.movimientos.length > 0;
+        const tieneSaldo = saldoData.movimientos.length > 0;
+        if (!tieneDeudas && !tieneSaldo) {
+          cuerpo.innerHTML = `<p class="vacio">Todavía no tiene movimientos.</p>`;
+          return;
+        }
 
-      for (const p of d.pagos) {
-        const fila = document.createElement("div");
-        fila.className = "fila-mov";
-        fila.style.color = "var(--success)";
-        const fechaP = p.creado_en.slice(0, 16).replace("T", " ");
-        fila.innerHTML = `<span>Pago (${fechaP})</span><span>− ${fmtPrecio(p.monto)}</span>`;
-        box.appendChild(fila);
+        if (tieneSaldo) {
+          const h = document.createElement("h4");
+          h.textContent = "Saldo a favor";
+          h.style.margin = "0 0 8px";
+          cuerpo.appendChild(h);
+          for (const m of saldoData.movimientos) {
+            const box = document.createElement("div");
+            box.className = "detalle-mov";
+            const fecha = m.creado_en.slice(0, 16).replace("T", " ");
+            const esCarga = m.monto >= 0;
+            const fila = document.createElement("div");
+            fila.className = "fila-mov";
+            fila.innerHTML = `<span>${m.descripcion || (esCarga ? "Carga" : "Consumo")} · ${fecha}</span>`;
+            const valor = document.createElement("span");
+            valor.className = esCarga ? "saldo-ok" : "saldo-debe";
+            valor.textContent = `${esCarga ? "+" : ""}${fmtPrecio(m.monto)}`;
+            fila.appendChild(valor);
+            box.appendChild(fila);
+            if (!esCarga) {
+              for (const pr of m.productos || []) {
+                const sub = document.createElement("div");
+                sub.className = "fila-mov";
+                sub.style.color = "var(--muted)";
+                sub.style.fontSize = "0.85rem";
+                sub.innerHTML = `<span>${pr.cantidad}× ${pr.nombre_producto}</span><span>${fmtPrecio(pr.subtotal)}</span>`;
+                box.appendChild(sub);
+              }
+            }
+            cuerpo.appendChild(box);
+          }
+        }
+
+        if (tieneDeudas) {
+          const h = document.createElement("h4");
+          h.textContent = "Fiado";
+          h.style.margin = "14px 0 8px";
+          cuerpo.appendChild(h);
+          for (const d of data.movimientos.slice().reverse()) {
+            const box = document.createElement("div");
+            box.className = "detalle-mov";
+            const fecha = d.creado_en.slice(0, 16).replace("T", " ");
+            const titulo = document.createElement("div");
+            titulo.className = "titulo";
+            titulo.textContent = `Deuda #${d.id} · ${fecha}`;
+            box.appendChild(titulo);
+
+            const total = document.createElement("div");
+            total.className = "fila-mov";
+            total.innerHTML = `<span>Dejó fiado</span><span>${fmtPrecio(d.total)}</span>`;
+            box.appendChild(total);
+
+            for (const pr of d.productos || []) {
+              const fila = document.createElement("div");
+              fila.className = "fila-mov";
+              fila.style.color = "var(--muted)";
+              fila.style.fontSize = "0.85rem";
+              fila.innerHTML = `<span>${pr.cantidad}× ${pr.nombre_producto}</span><span>${fmtPrecio(pr.subtotal)}</span>`;
+              box.appendChild(fila);
+            }
+
+            for (const p of d.pagos) {
+              const fila = document.createElement("div");
+              fila.className = "fila-mov";
+              fila.style.color = "var(--success)";
+              const fechaP = p.creado_en.slice(0, 16).replace("T", " ");
+              fila.innerHTML = `<span>Pago (${fechaP})</span><span>− ${fmtPrecio(p.monto)}</span>`;
+              box.appendChild(fila);
+            }
+
+            const estado = document.createElement("div");
+            estado.className = "fila-mov";
+            estado.style.fontWeight = "600";
+            if (d.estado === "pagada") {
+              estado.innerHTML = `<span style="color: var(--success)">Pagada</span>`;
+            } else {
+              estado.innerHTML = `<span>Saldo</span><span class="saldo-debe">${fmtPrecio(d.saldo)}</span>`;
+            }
+            box.appendChild(estado);
+            cuerpo.appendChild(box);
+          }
+        }
+      } catch (e) {
+        cuerpo.innerHTML = `<p class="vacio">No se pudo cargar el historial: ${e.message}</p>`;
+        toast(e.message, "error");
       }
-
-      const estado = document.createElement("div");
-      estado.className = "fila-mov";
-      estado.style.fontWeight = "600";
-      if (d.estado === "pagada") {
-        estado.innerHTML = `<span style="color: var(--success)">Pagada</span>`;
-      } else {
-        estado.innerHTML = `<span>Saldo</span><span class="saldo-debe">${fmtPrecio(d.saldo)}</span>`;
-      }
-      box.appendChild(estado);
-      cuerpo.appendChild(box);
-    }
+    })();
   });
 }
 

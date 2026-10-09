@@ -38,7 +38,7 @@ function calcular() {
   if (!resumenActual) return;
   const fondo = Number($fondo.value) || 0;
   const contado = Number($contado.value);
-  const esperado = fondo + resumenActual.ventas_efectivo + resumenActual.cobros_fiado;
+  const esperado = fondo + resumenActual.ventas_efectivo + resumenActual.cobros_fiado + (resumenActual.cargas_saldo || 0);
   $esperado.textContent = fmtPrecio(esperado);
 
   if ($contado.value === "") {
@@ -71,6 +71,7 @@ async function cargarHoy() {
   document.getElementById("r-ventas-efectivo").textContent = fmtPrecio(data.ventas_efectivo);
   document.getElementById("r-ventas-fiado").textContent = fmtPrecio(data.ventas_fiado);
   document.getElementById("r-cobros-fiado").textContent = fmtPrecio(data.cobros_fiado);
+  document.getElementById("r-cargas-saldo").textContent = fmtPrecio(data.cargas_saldo);
   document.getElementById("r-compras").textContent =
     `${data.cantidad_compras} (${fmtPrecio(data.compras_total)})`;
 
@@ -139,6 +140,9 @@ async function cargarCierres() {
     const tdCobros = document.createElement("td");
     tdCobros.textContent = fmtPrecio(c.cobros_fiado);
 
+    const tdCargas = document.createElement("td");
+    tdCargas.textContent = fmtPrecio(c.cargas_saldo || 0);
+
     const tdEsperado = document.createElement("td");
     tdEsperado.textContent = fmtPrecio(c.total_esperado);
 
@@ -157,7 +161,7 @@ async function cargarCierres() {
       tdDif.textContent = "Falta " + fmtPrecio(Math.abs(c.diferencia));
     }
 
-    tr.append(tdFecha, tdEfec, tdFiado, tdCobros, tdEsperado, tdContado, tdDif);
+    tr.append(tdFecha, tdEfec, tdFiado, tdCobros, tdCargas, tdEsperado, tdContado, tdDif);
     tbody.appendChild(tr);
   }
 

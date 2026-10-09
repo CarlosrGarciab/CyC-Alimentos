@@ -7,6 +7,7 @@ const $carrito = document.getElementById("carrito");
 const $total = document.getElementById("total");
 const $btnCobrar = document.getElementById("btn-cobrar");
 const $btnFiado = document.getElementById("btn-fiado");
+const $btnSaldo = document.getElementById("btn-saldo");
 const $modal = document.getElementById("modal");
 const $btnMasProductos = document.getElementById("btn-mas-productos");
 const $btnMasVentas = document.getElementById("btn-mas-ventas");
@@ -57,7 +58,7 @@ async function api(url, options = {}) {
 }
 
 function fmtPrecio(n) {
-  return MONEDA + " " + Number(n).toLocaleString("es", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return MONEDA + " " + Number(n ?? 0).toLocaleString("es", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 // ---------- Productos / tabs ----------
@@ -97,6 +98,13 @@ function renderTabs() {
     };
     $tabs.appendChild(btn);
   }
+}
+
+function avisoStock(p) {
+  if (p.stock_actual === null || p.stock_actual === undefined) return null;
+  if (p.stock_actual <= 0) return "agotado";
+  if (p.stock_minimo != null && p.stock_actual <= p.stock_minimo) return "bajo";
+  return null;
 }
 
 function renderGrid() {
@@ -143,6 +151,17 @@ function renderGrid() {
     precio.textContent = fmtPrecio(p.precio);
 
     btn.append(nombre, precio);
+
+    const aviso = avisoStock(p);
+    if (aviso) {
+      btn.classList.add(aviso === "agotado" ? "prod-agotado" : "prod-bajo");
+      const tag = document.createElement("span");
+      tag.className = "prod-aviso";
+      tag.textContent = aviso === "agotado" ? "Sin stock" : "Stock bajo";
+      btn.appendChild(tag);
+      if (aviso === "agotado") btn.disabled = true;
+    }
+
     btn.onclick = () => {
       if (modoRapido) {
         ventaDirecta(p);
@@ -238,65 +257,74 @@ function renderCarrito() {
   const vacio = items.length === 0;
   $btnCobrar.disabled = vacio;
   $btnFiado.disabled = vacio;
+  $btnSaldo.disabled = vacio;
 }
 
-// ---------- Fiado ----------
+// ---------- Venta a cuenta (fiado / saldo a favor) ----------
+
+let cuentaMetodo = "fiado";
+let clienteSeleccionado = null;
 
 function cerrarModal() {
   $modal.innerHTML = "";
 }
 
-function abrirModalFiado() {
+function abrirModalCuenta(metodo) {
+  cuentaMetodo = metodo;
+  clienteSeleccionado = null;
+  const esSaldo = metodo === "saldo";
   $modal.innerHTML = "";
   const fondo = document.createElement("div");
   fondo.className = "modal-fondo";
   const caja = document.createElement("div");
   caja.className = "modal";
   caja.innerHTML = `
-    <h3>Vender a fiado</h3>
+    <h3>${esSaldo ? "Vender con saldo a favor" : "Vender a fiado"}</h3>
     <p style="margin-top: 0; color: var(--muted); font-size: 0.92rem;">
-      Total: <strong id="fiado-total"></strong>
+      Total: <strong id="cuenta-total"></strong>
     </p>
-    <input id="fiado-buscar" class="buscador-cliente" placeholder="Buscar cliente por nombre o curso...">
-    <div id="fiado-lista" class="lista-clientes-modal"></div>
+    <input id="cuenta-buscar" class="buscador-cliente" placeholder="Buscar cliente por nombre o curso...">
+    <div id="cuenta-lista" class="lista-clientes-modal"></div>
     <p style="font-size: 0.85rem; color: var(--muted); margin: 12px 0 4px;">¿No lo encuentra?</p>
     <div class="form-fila">
-      <input id="fiado-nuevo-nombre" placeholder="Nombre del cliente">
-      <select id="fiado-nuevo-tipo">
+      <input id="cuenta-nuevo-nombre" placeholder="Nombre del cliente">
+      <select id="cuenta-nuevo-tipo">
         <option value="estudiante">Estudiante</option>
-        <option value="profesor">Profesor</option>
+        ${esSaldo ? "" : '<option value="profesor">Profesor</option>'}
       </select>
-      <input id="fiado-nuevo-curso" placeholder="Curso (ej. 3°B)">
+      <input id="cuenta-nuevo-curso" placeholder="Curso (ej. 3°B)">
     </div>
     <div class="modal-acciones">
-      <button class="secundario" id="fiado-cancelar">Cancelar</button>
-      <button id="fiado-confirmar">Registrar fiado</button>
+      <button class="secundario" id="cuenta-cancelar">Cancelar</button>
+      <button id="cuenta-confirmar">${esSaldo ? "Cobrar con saldo" : "Registrar fiado"}</button>
     </div>
   `;
   fondo.appendChild(caja);
   $modal.appendChild(fondo);
   fondo.addEventListener("click", (e) => { if (e.target === fondo) cerrarModal(); });
 
-  document.getElementById("fiado-total").textContent = fmtPrecio(totalCarrito());
-  document.getElementById("fiado-cancelar").onclick = cerrarModal;
-  document.getElementById("fiado-confirmar").onclick = confirmarFiado;
-  document.getElementById("fiado-buscar").addEventListener("input", (e) => cargarClientesModal(e.target.value));
-  document.getElementById("fiado-nuevo-tipo").addEventListener("change", (e) => {
-    document.getElementById("fiado-nuevo-curso").style.display =
+  document.getElementById("cuenta-total").textContent = fmtPrecio(totalCarrito());
+  document.getElementById("cuenta-cancelar").onclick = cerrarModal;
+  document.getElementById("cuenta-confirmar").onclick = confirmarCuenta;
+  document.getElementById("cuenta-buscar").addEventListener("input", (e) => cargarClientesModal(e.target.value));
+  document.getElementById("cuenta-nuevo-tipo").addEventListener("change", (e) => {
+    document.getElementById("cuenta-nuevo-curso").style.display =
       e.target.value === "profesor" ? "none" : "";
   });
-  document.getElementById("fiado-buscar").focus();
+  document.getElementById("cuenta-buscar").focus();
   cargarClientesModal("");
 }
 
-let clienteSeleccionado = null;
-
 async function cargarClientesModal(q) {
-  const $lista = document.getElementById("fiado-lista");
+  const $lista = document.getElementById("cuenta-lista");
   if (!$lista) return;
+  const total = totalCarrito();
   const params = new URLSearchParams();
   if (q) params.set("q", q);
-  const clientes = await api(`/api/clientes?${params}`);
+  let clientes = await api(`/api/clientes?${params}`);
+  if (cuentaMetodo === "saldo") {
+    clientes = clientes.filter((c) => c.tipo !== "profesor");
+  }
   $lista.innerHTML = "";
   if (!clientes.length) {
     $lista.innerHTML = `<p class="vacio" style="padding: 10px 12px;">Sin clientes</p>`;
@@ -308,7 +336,13 @@ async function cargarClientesModal(q) {
     const info = document.createElement("span");
     info.textContent = `${c.nombre}${c.curso ? " · " + c.curso : ""}`;
     const saldo = document.createElement("span");
-    if (c.saldo_pendiente > 0.001) {
+    if (cuentaMetodo === "saldo") {
+      const saldoDisp = Number(c.saldo_favor || 0);
+      const alcanza = saldoDisp >= total - 0.001;
+      saldo.className = alcanza ? "saldo-ok" : "saldo-debe";
+      saldo.textContent = `Saldo ${fmtPrecio(saldoDisp)}`;
+      if (!alcanza) btn.title = "Saldo insuficiente para esta venta";
+    } else if (c.saldo_pendiente > 0.001) {
       saldo.className = "saldo-debe";
       saldo.textContent = `Debe ${fmtPrecio(c.saldo_pendiente)}`;
     } else {
@@ -327,13 +361,13 @@ async function cargarClientesModal(q) {
   }
 }
 
-async function confirmarFiado() {
-  const nombreNuevo = document.getElementById("fiado-nuevo-nombre").value.trim();
+async function confirmarCuenta() {
+  const nombreNuevo = document.getElementById("cuenta-nuevo-nombre").value.trim();
   let cliente = clienteSeleccionado;
   try {
     if (!cliente && nombreNuevo) {
-      const tipo = document.getElementById("fiado-nuevo-tipo").value;
-      const curso = document.getElementById("fiado-nuevo-curso").value.trim() || null;
+      const tipo = document.getElementById("cuenta-nuevo-tipo").value;
+      const curso = document.getElementById("cuenta-nuevo-curso").value.trim() || null;
       cliente = await api("/api/clientes", {
         method: "POST",
         body: JSON.stringify({ nombre: nombreNuevo, tipo, curso }),
@@ -349,11 +383,15 @@ async function confirmarFiado() {
     }));
     const r = await api("/api/ventas", {
       method: "POST",
-      body: JSON.stringify({ metodo_pago: "fiado", cliente_id: cliente.id, items }),
+      body: JSON.stringify({ metodo_pago: cuentaMetodo, cliente_id: cliente.id, items }),
     });
     cerrarModal();
     clienteSeleccionado = null;
-    toast(`Fiado registrado a ${cliente.nombre}: ${fmtPrecio(r.total)}`);
+    toast(
+      cuentaMetodo === "saldo"
+        ? `Cobrado del saldo de ${cliente.nombre}: ${fmtPrecio(r.total)}`
+        : `Fiado registrado a ${cliente.nombre}: ${fmtPrecio(r.total)}`
+    );
     carrito = {};
     renderCarrito();
     await cargarHistorial();
@@ -362,7 +400,8 @@ async function confirmarFiado() {
   }
 }
 
-$btnFiado.onclick = abrirModalFiado;
+$btnFiado.onclick = () => abrirModalCuenta("fiado");
+$btnSaldo.onclick = () => abrirModalCuenta("saldo");
 
 // ---------- Cobro ----------
 
@@ -389,7 +428,7 @@ async function ventaDirecta(producto) {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !modoRapido && Object.keys(carrito).length > 0) {
+  if (e.key === "Enter" && !modoRapido && !$modal.innerHTML && Object.keys(carrito).length > 0) {
     $btnCobrar.click();
   }
   if (e.key === "Escape" && Object.keys(carrito).length > 0) {
@@ -426,7 +465,7 @@ function hoyDesde() {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd} 00:00:00`;
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 async function cargarHistorial() {
@@ -455,6 +494,13 @@ function renderHistorial() {
       const tag = document.createElement("span");
       tag.className = "etiqueta-fiado";
       tag.textContent = v.cliente_nombre ? `Fiado · ${v.cliente_nombre}` : "Fiado";
+      div.querySelector(".hora").after(tag);
+    } else if (v.metodo_pago === "saldo") {
+      const tag = document.createElement("span");
+      tag.className = "etiqueta-fiado";
+      tag.style.background = "#ede9fe";
+      tag.style.color = "#5b21b6";
+      tag.textContent = v.cliente_nombre ? `Saldo · ${v.cliente_nombre}` : "Saldo";
       div.querySelector(".hora").after(tag);
     }
     div.querySelector(".detalle").textContent = detalle;

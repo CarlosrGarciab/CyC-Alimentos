@@ -246,6 +246,7 @@ body.modo-rapido aside .card:first-child { display: none; }
 }
 
 .btn-producto {
+  position: relative;
   background: #fff;
   border: 2px solid var(--border);
   color: var(--text);
@@ -260,6 +261,24 @@ body.modo-rapido aside .card:first-child { display: none; }
 .btn-producto:hover { border-color: var(--primary); background: #eff6ff; }
 .btn-producto .nombre { font-weight: 600; font-size: 0.95rem; }
 .btn-producto .precio { color: var(--primary); font-weight: 700; }
+
+.btn-producto.prod-bajo { border-color: #f59e0b; background: #fffbeb; }
+.btn-producto.prod-bajo:hover { border-color: #d97706; background: #fef3c7; }
+.btn-producto.prod-agotado { border-color: #dc2626; background: #fef2f2; }
+.btn-producto.prod-agotado:hover { border-color: #dc2626; background: #fee2e2; }
+.btn-producto.prod-agotado { opacity: 0.75; cursor: not-allowed; }
+.btn-producto .prod-aviso {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+}
+.btn-producto.prod-bajo .prod-aviso { background: #f59e0b; color: #fff; }
+.btn-producto.prod-agotado .prod-aviso { background: #dc2626; color: #fff; }
 
 .btn-producto .foto {
   width: 72px;
@@ -327,7 +346,7 @@ body.modo-rapido aside .card:first-child { display: none; }
 
 .btn-cobrar { flex: 2; padding: 14px; font-size: 1.05rem; font-weight: 700; background: var(--success); }
 .btn-cobrar:hover { background: #15803d; }
-.btn-cobrar:disabled, .btn-fiado:disabled { background: #cbd5e1; cursor: not-allowed; }
+.btn-cobrar:disabled, .btn-fiado:disabled, .btn-saldo:disabled { background: #cbd5e1; cursor: not-allowed; }
 
 .btn-fiado {
   padding: 14px;
@@ -339,6 +358,16 @@ body.modo-rapido aside .card:first-child { display: none; }
 
 .btn-fiado:hover { background: var(--warning-dark); }
 
+.btn-saldo {
+  padding: 14px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  background: #7c3aed;
+  flex: 1;
+}
+
+.btn-saldo:hover { background: #6d28d9; }
+
 .venta-historial-item {
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
@@ -347,6 +376,8 @@ body.modo-rapido aside .card:first-child { display: none; }
 
 .venta-historial-item .hora { color: var(--muted); }
 .venta-historial-item .total { font-weight: 700; float: right; }
+
+.hist-acciones { margin-top: 6px; display: flex; gap: 6px; }
 
 .ver-mas {
   width: 100%;
@@ -459,6 +490,11 @@ body.modo-rapido aside .card:first-child { display: none; }
 .badge.bajo { background: #fef3c7; color: #92400e; }
 .badge.agotado { background: #fee2e2; color: #991b1b; }
 .badge.sin_control { background: #e2e8f0; color: #475569; }
+
+tr.fila-bajo td { background: #fef3c7; }
+tr.fila-agotado td { background: #fecaca; }
+tr.fila-bajo td:first-child { border-left: 4px solid #f59e0b; }
+tr.fila-agotado td:first-child { border-left: 4px solid #dc2626; }
 
 .fila-item-compra {
   display: flex;

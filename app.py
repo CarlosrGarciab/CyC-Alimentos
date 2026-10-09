@@ -57,7 +57,7 @@ class VentaItemIn(BaseModel):
 
 
 class VentaIn(BaseModel):
-    metodo_pago: Literal["efectivo", "fiado"] = "efectivo"
+    metodo_pago: Literal["efectivo", "fiado", "saldo"] = "efectivo"
     cliente_id: Optional[int] = None
     items: list[VentaItemIn]
 
@@ -71,6 +71,11 @@ class ClienteIn(BaseModel):
 
 class PagoFiadoIn(BaseModel):
     monto: float
+
+
+class SaldoIn(BaseModel):
+    monto: float
+    descripcion: Optional[str] = None
 
 
 class CierreIn(BaseModel):
@@ -364,6 +369,115 @@ def eliminar_imagen_producto(producto_id: int):
 
 # ---------- Ventas ----------
 
+def _validar_items_venta(conn, data: VentaIn):
+    detalles = []
+    total = 0.0
+    for item in data.items:
+        if item.cantidad <= 0:
+            raise HTTPException(400, "La cantidad debe ser mayor a cero")
+        prod = conn.execute(
+            "SELECT id, nombre, precio, stock_actual FROM productos WHERE id = ? AND activo = 1",
+            (item.producto_id,),
+        ).fetchone()
+        if not prod:
+            raise HTTPException(400, f"Producto {item.producto_id} no disponible")
+        if prod["stock_actual"] is not None and item.cantidad > prod["stock_actual"]:
+            raise HTTPException(
+                400,
+                f"Stock insuficiente de '{prod['nombre']}' "
+                f"(disponible: {prod['stock_actual']})",
+            )
+        subtotal = prod["precio"] * item.cantidad
+        total += subtotal
+        detalles.append(
+            {
+                "producto_id": prod["id"],
+                "nombre_producto": prod["nombre"],
+                "cantidad": item.cantidad,
+                "precio_unitario": prod["precio"],
+                "stock_actual": prod["stock_actual"],
+            }
+        )
+    return detalles, total
+
+
+def _descontar_stock(conn, detalles):
+    for d in detalles:
+        if d.get("stock_actual") is not None:
+            conn.execute(
+                "UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ?",
+                (d["cantidad"], d["producto_id"]),
+            )
+
+
+def _revertir_venta(conn, venta_id: int) -> None:
+    """Devuelve stock, anula deuda/saldo y borra los detalles de una venta."""
+    detalles = conn.execute(
+        "SELECT producto_id, cantidad FROM venta_detalles WHERE venta_id = ?",
+        (venta_id,),
+    ).fetchall()
+    for d in detalles:
+        if d["producto_id"] is not None:
+            conn.execute(
+                "UPDATE productos SET stock_actual = stock_actual + ? "
+                "WHERE id = ? AND stock_actual IS NOT NULL",
+                (d["cantidad"], d["producto_id"]),
+            )
+
+    deuda_ids = [r["id"] for r in conn.execute(
+        "SELECT id FROM deudas WHERE venta_id = ?", (venta_id,)
+    ).fetchall()]
+    if deuda_ids:
+        ph = ",".join("?" * len(deuda_ids))
+        conn.execute(f"DELETE FROM pagos_fiado WHERE deuda_id IN ({ph})", deuda_ids)
+        conn.execute(f"DELETE FROM deudas WHERE id IN ({ph})", deuda_ids)
+
+    movs = conn.execute(
+        "SELECT cliente_id, monto FROM movimientos_saldo WHERE venta_id = ?",
+        (venta_id,),
+    ).fetchall()
+    for m in movs:
+        conn.execute(
+            "UPDATE clientes SET saldo_favor = saldo_favor - ? WHERE id = ?",
+            (m["monto"], m["cliente_id"]),
+        )
+    conn.execute("DELETE FROM movimientos_saldo WHERE venta_id = ?", (venta_id,))
+    conn.execute("DELETE FROM venta_detalles WHERE venta_id = ?", (venta_id,))
+
+
+def _insertar_detalles_venta(conn, venta_id: int, detalles: list) -> None:
+    conn.executemany(
+        """
+        INSERT INTO venta_detalles (venta_id, producto_id, nombre_producto, cantidad, precio_unitario)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        [
+            (venta_id, d["producto_id"], d["nombre_producto"], d["cantidad"], d["precio_unitario"])
+            for d in detalles
+        ],
+    )
+
+
+def _cobrar_venta(conn, venta_id: int, metodo: str, cliente, total: float):
+    """Registra deuda (fiado) o descuenta saldo a favor de la venta."""
+    if metodo == "fiado":
+        cur = conn.execute(
+            "INSERT INTO deudas (cliente_id, venta_id, total, saldo) VALUES (?, ?, ?, ?)",
+            (cliente["id"], venta_id, total, total),
+        )
+        return cur.lastrowid
+    if metodo == "saldo":
+        conn.execute(
+            "UPDATE clientes SET saldo_favor = saldo_favor - ? WHERE id = ?",
+            (total, cliente["id"]),
+        )
+        conn.execute(
+            "INSERT INTO movimientos_saldo (cliente_id, venta_id, monto, descripcion) VALUES (?, ?, ?, ?)",
+            (cliente["id"], venta_id, -total, f"Venta #{venta_id}"),
+        )
+    return None
+
+
 @app.post("/api/ventas", status_code=201)
 def crear_venta(data: VentaIn):
     if not data.items:
@@ -371,76 +485,36 @@ def crear_venta(data: VentaIn):
     conn = get_connection()
     try:
         cliente = None
-        if data.metodo_pago == "fiado":
+        if data.metodo_pago in ("fiado", "saldo"):
             if not data.cliente_id:
-                raise HTTPException(400, "Debes seleccionar un cliente para vender a fiado")
+                raise HTTPException(400, "Debes seleccionar un cliente")
             cliente = conn.execute(
-                "SELECT id, nombre FROM clientes WHERE id = ? AND activo = 1",
+                "SELECT id, nombre, tipo, saldo_favor FROM clientes WHERE id = ? AND activo = 1",
                 (data.cliente_id,),
             ).fetchone()
             if not cliente:
                 raise HTTPException(400, "El cliente no existe o está inactivo")
+            if data.metodo_pago == "saldo" and cliente["tipo"] == "profesor":
+                raise HTTPException(400, "Los profesores no pueden usar saldo a favor")
 
-        detalles = []
-        total = 0.0
-        for item in data.items:
-            if item.cantidad <= 0:
-                raise HTTPException(400, "La cantidad debe ser mayor a cero")
-            prod = conn.execute(
-                "SELECT id, nombre, precio, stock_actual FROM productos WHERE id = ? AND activo = 1",
-                (item.producto_id,),
-            ).fetchone()
-            if not prod:
-                raise HTTPException(400, f"Producto {item.producto_id} no disponible")
-            if prod["stock_actual"] is not None and item.cantidad > prod["stock_actual"]:
-                raise HTTPException(
-                    400,
-                    f"Stock insuficiente de '{prod['nombre']}' "
-                    f"(disponible: {prod['stock_actual']})",
-                )
-            subtotal = prod["precio"] * item.cantidad
-            total += subtotal
-            detalles.append(
-                {
-                    "producto_id": prod["id"],
-                    "nombre_producto": prod["nombre"],
-                    "cantidad": item.cantidad,
-                    "precio_unitario": prod["precio"],
-                    "stock_actual": prod["stock_actual"],
-                }
+        detalles, total = _validar_items_venta(conn, data)
+        if data.metodo_pago == "saldo" and cliente["saldo_favor"] + 0.001 < total:
+            raise HTTPException(
+                400,
+                f"Saldo a favor insuficiente (disponible: {cliente['saldo_favor']:.2f})",
             )
 
         cur = conn.execute(
-            "INSERT INTO ventas (total, metodo_pago) VALUES (?, ?)",
-            (total, data.metodo_pago),
+            "INSERT INTO ventas (total, metodo_pago, cliente_id) VALUES (?, ?, ?)",
+            (total, data.metodo_pago, cliente["id"] if cliente else None),
         )
         venta_id = cur.lastrowid
-        conn.executemany(
-            """
-            INSERT INTO venta_detalles (venta_id, producto_id, nombre_producto, cantidad, precio_unitario)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            [
-                (venta_id, d["producto_id"], d["nombre_producto"], d["cantidad"], d["precio_unitario"])
-                for d in detalles
-            ],
-        )
+        _insertar_detalles_venta(conn, venta_id, detalles)
 
-        deuda_id = None
-        if data.metodo_pago == "fiado":
-            cur = conn.execute(
-                "INSERT INTO deudas (cliente_id, venta_id, total, saldo) VALUES (?, ?, ?, ?)",
-                (cliente["id"], venta_id, total, total),
-            )
-            deuda_id = cur.lastrowid
-
+        deuda_id = _cobrar_venta(conn, venta_id, data.metodo_pago, cliente, total)
+        _descontar_stock(conn, detalles)
         for d in detalles:
-            if d["stock_actual"] is not None:
-                conn.execute(
-                    "UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ?",
-                    (d["cantidad"], d["producto_id"]),
-                )
-            del d["stock_actual"]
+            d.pop("stock_actual", None)
 
         conn.commit()
         return {
@@ -455,17 +529,82 @@ def crear_venta(data: VentaIn):
         conn.close()
 
 
+@app.put("/api/ventas/{venta_id}")
+def editar_venta(venta_id: int, data: VentaIn):
+    if not data.items:
+        raise HTTPException(400, "La venta debe tener al menos un producto")
+    conn = get_connection()
+    try:
+        venta = conn.execute("SELECT id FROM ventas WHERE id = ?", (venta_id,)).fetchone()
+        if not venta:
+            raise HTTPException(404, "Venta no encontrada")
+
+        # Revertimos la venta anterior para recalcular stock/deuda/saldo
+        _revertir_venta(conn, venta_id)
+
+        cliente = None
+        if data.metodo_pago in ("fiado", "saldo"):
+            if not data.cliente_id:
+                raise HTTPException(400, "Debes seleccionar un cliente")
+            cliente = conn.execute(
+                "SELECT id, nombre, tipo, saldo_favor FROM clientes WHERE id = ? AND activo = 1",
+                (data.cliente_id,),
+            ).fetchone()
+            if not cliente:
+                raise HTTPException(400, "El cliente no existe o está inactivo")
+            if data.metodo_pago == "saldo" and cliente["tipo"] == "profesor":
+                raise HTTPException(400, "Los profesores no pueden usar saldo a favor")
+
+        detalles, total = _validar_items_venta(conn, data)
+        if data.metodo_pago == "saldo" and cliente["saldo_favor"] + 0.001 < total:
+            raise HTTPException(
+                400,
+                f"Saldo a favor insuficiente (disponible: {cliente['saldo_favor']:.2f})",
+            )
+
+        conn.execute(
+            "UPDATE ventas SET total = ?, metodo_pago = ?, cliente_id = ? WHERE id = ?",
+            (total, data.metodo_pago, cliente["id"] if cliente else None, venta_id),
+        )
+        _insertar_detalles_venta(conn, venta_id, detalles)
+        _cobrar_venta(conn, venta_id, data.metodo_pago, cliente, total)
+        _descontar_stock(conn, detalles)
+        for d in detalles:
+            d.pop("stock_actual", None)
+
+        conn.commit()
+        return {"id": venta_id, "total": total, "metodo_pago": data.metodo_pago}
+    finally:
+        conn.close()
+
+
+@app.delete("/api/ventas/{venta_id}")
+def eliminar_venta(venta_id: int):
+    conn = get_connection()
+    try:
+        venta = conn.execute("SELECT id FROM ventas WHERE id = ?", (venta_id,)).fetchone()
+        if not venta:
+            raise HTTPException(404, "Venta no encontrada")
+        _revertir_venta(conn, venta_id)
+        conn.execute("DELETE FROM ventas WHERE id = ?", (venta_id,))
+        conn.commit()
+        return {"id": venta_id, "eliminado": True}
+    finally:
+        conn.close()
+
+
 @app.get("/api/ventas")
 def listar_ventas(desde: Optional[str] = None, hasta: Optional[str] = None,
                   limite: int = 100, offset: int = 0):
     conn = get_connection()
     try:
         sql = """
-            SELECT v.id, v.total, v.metodo_pago, v.creado_en,
-                   c.nombre AS cliente_nombre
+            SELECT v.id, v.total, v.metodo_pago, v.creado_en, v.cliente_id,
+                   COALESCE(c.nombre, c2.nombre) AS cliente_nombre
             FROM ventas v
+            LEFT JOIN clientes c ON c.id = v.cliente_id
             LEFT JOIN deudas d ON d.venta_id = v.id
-            LEFT JOIN clientes c ON c.id = d.cliente_id
+            LEFT JOIN clientes c2 ON c2.id = d.cliente_id
             WHERE 1 = 1
         """
         params: list = []
@@ -476,13 +615,13 @@ def listar_ventas(desde: Optional[str] = None, hasta: Optional[str] = None,
             sql += " AND date(v.creado_en) <= ?"
             params.append(hasta)
         sql += " ORDER BY v.id DESC LIMIT ? OFFSET ?"
-        params.extend([max(1, min(limite, 500)), max(0, offset)])
+        params.extend([max(1, min(limite, 5000)), max(0, offset)])
         ventas = [dict(r) for r in conn.execute(sql, params).fetchall()]
         for v in ventas:
             v["detalles"] = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT nombre_producto, cantidad, precio_unitario FROM venta_detalles WHERE venta_id = ?",
+                    "SELECT producto_id, nombre_producto, cantidad, precio_unitario FROM venta_detalles WHERE venta_id = ?",
                     (v["id"],),
                 ).fetchall()
             ]
@@ -499,6 +638,7 @@ def listar_clientes(q: Optional[str] = None, incluir_inactivos: bool = False):
     try:
         sql = """
             SELECT cl.id, cl.nombre, cl.tipo, cl.curso, cl.telefono, cl.activo, cl.creado_en,
+                   cl.saldo_favor,
                    COALESCE((SELECT SUM(d.saldo) FROM deudas d
                              WHERE d.cliente_id = cl.id AND d.estado = 'pendiente'), 0) AS saldo_pendiente
             FROM clientes cl
@@ -593,9 +733,72 @@ def eliminar_cliente(cliente_id: int):
             placeholders = ",".join("?" * len(deuda_ids))
             conn.execute(f"DELETE FROM pagos_fiado WHERE deuda_id IN ({placeholders})", deuda_ids)
             conn.execute(f"DELETE FROM deudas WHERE id IN ({placeholders})", deuda_ids)
+        conn.execute("DELETE FROM movimientos_saldo WHERE cliente_id = ?", (cliente_id,))
         conn.execute("DELETE FROM clientes WHERE id = ?", (cliente_id,))
         conn.commit()
         return {"id": cliente_id, "eliminado": True}
+    finally:
+        conn.close()
+
+
+# ---------- Saldo a favor ----------
+
+def _productos_venta(conn, venta_id):
+    if not venta_id:
+        return []
+    return [dict(r) for r in conn.execute(
+        "SELECT nombre_producto, cantidad, precio_unitario, "
+        "(cantidad * precio_unitario) AS subtotal "
+        "FROM venta_detalles WHERE venta_id = ? ORDER BY id",
+        (venta_id,),
+    ).fetchall()]
+
+
+@app.post("/api/clientes/{cliente_id}/saldo", status_code=201)
+def cargar_saldo(cliente_id: int, data: SaldoIn):
+    if data.monto <= 0:
+        raise HTTPException(400, "El monto debe ser mayor a cero")
+    conn = get_connection()
+    try:
+        cl = conn.execute("SELECT id, nombre, tipo FROM clientes WHERE id = ?", (cliente_id,)).fetchone()
+        if not cl:
+            raise HTTPException(404, "Cliente no encontrado")
+        if cl["tipo"] == "profesor":
+            raise HTTPException(400, "Los profesores no pueden tener saldo a favor")
+        conn.execute(
+            "UPDATE clientes SET saldo_favor = saldo_favor + ? WHERE id = ?",
+            (data.monto, cliente_id),
+        )
+        conn.execute(
+            "INSERT INTO movimientos_saldo (cliente_id, monto, descripcion) VALUES (?, ?, ?)",
+            (cliente_id, data.monto, data.descripcion.strip() if data.descripcion else "Carga de saldo"),
+        )
+        conn.commit()
+        nuevo = conn.execute(
+            "SELECT saldo_favor FROM clientes WHERE id = ?", (cliente_id,)
+        ).fetchone()[0]
+        return {"cliente_id": cliente_id, "saldo_favor": nuevo}
+    finally:
+        conn.close()
+
+
+@app.get("/api/clientes/{cliente_id}/saldo")
+def movimientos_saldo(cliente_id: int):
+    conn = get_connection()
+    try:
+        cl = conn.execute(
+            "SELECT id, nombre, saldo_favor FROM clientes WHERE id = ?", (cliente_id,)
+        ).fetchone()
+        if not cl:
+            raise HTTPException(404, "Cliente no encontrado")
+        movs = [dict(r) for r in conn.execute(
+            "SELECT id, venta_id, monto, descripcion, creado_en FROM movimientos_saldo "
+            "WHERE cliente_id = ? ORDER BY id DESC",
+            (cliente_id,),
+        ).fetchall()]
+        for m in movs:
+            m["productos"] = _productos_venta(conn, m["venta_id"])
+        return {"cliente": dict(cl), "movimientos": movs}
     finally:
         conn.close()
 
@@ -679,6 +882,7 @@ def movimientos_cliente(cliente_id: int):
                 "SELECT monto, creado_en FROM pagos_fiado WHERE deuda_id = ? ORDER BY id",
                 (d["id"],),
             ).fetchall()]
+            d["productos"] = _productos_venta(conn, d["venta_id"])
 
         return {"cliente": dict(cl), "movimientos": deudas}
     finally:
@@ -819,6 +1023,69 @@ def ver_inventario():
         conn.close()
 
 
+def _validar_items_compra(conn, data: CompraIn):
+    detalles = []
+    total = 0.0
+    for item in data.items:
+        if item.cantidad <= 0:
+            raise HTTPException(400, "La cantidad debe ser mayor a cero")
+        if item.costo_unitario < 0:
+            raise HTTPException(400, "El costo no puede ser negativo")
+        prod = conn.execute(
+            "SELECT id, nombre FROM productos WHERE id = ? AND activo = 1",
+            (item.producto_id,),
+        ).fetchone()
+        if not prod:
+            raise HTTPException(400, f"Producto {item.producto_id} no disponible")
+        subtotal = item.costo_unitario * item.cantidad
+        total += subtotal
+        detalles.append(
+            {
+                "producto_id": prod["id"],
+                "nombre_producto": prod["nombre"],
+                "cantidad": item.cantidad,
+                "costo_unitario": item.costo_unitario,
+            }
+        )
+    return detalles, total
+
+
+def _revertir_compra(conn, compra_id: int) -> None:
+    """Descuenta el stock que había sumado la compra y borra sus detalles."""
+    detalles = conn.execute(
+        "SELECT producto_id, cantidad FROM compra_detalles WHERE compra_id = ?",
+        (compra_id,),
+    ).fetchall()
+    for d in detalles:
+        if d["producto_id"] is not None:
+            conn.execute(
+                "UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ?",
+                (d["cantidad"], d["producto_id"]),
+            )
+    conn.execute("DELETE FROM compra_detalles WHERE compra_id = ?", (compra_id,))
+
+
+def _insertar_detalles_compra(conn, compra_id: int, detalles: list) -> None:
+    conn.executemany(
+        """
+        INSERT INTO compra_detalles (compra_id, producto_id, nombre_producto, cantidad, costo_unitario)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        [
+            (compra_id, d["producto_id"], d["nombre_producto"], d["cantidad"], d["costo_unitario"])
+            for d in detalles
+        ],
+    )
+
+
+def _sumar_stock_compra(conn, detalles: list) -> None:
+    for d in detalles:
+        conn.execute(
+            "UPDATE productos SET stock_actual = COALESCE(stock_actual, 0) + ? WHERE id = ?",
+            (d["cantidad"], d["producto_id"]),
+        )
+
+
 @app.post("/api/compras", status_code=201)
 def crear_compra(data: CompraIn):
     if not data.items:
@@ -834,50 +1101,14 @@ def crear_compra(data: CompraIn):
             if not proveedor:
                 raise HTTPException(400, "El proveedor no existe o está inactivo")
 
-        detalles = []
-        total = 0.0
-        for item in data.items:
-            if item.cantidad <= 0:
-                raise HTTPException(400, "La cantidad debe ser mayor a cero")
-            if item.costo_unitario < 0:
-                raise HTTPException(400, "El costo no puede ser negativo")
-            prod = conn.execute(
-                "SELECT id, nombre FROM productos WHERE id = ? AND activo = 1",
-                (item.producto_id,),
-            ).fetchone()
-            if not prod:
-                raise HTTPException(400, f"Producto {item.producto_id} no disponible")
-            subtotal = item.costo_unitario * item.cantidad
-            total += subtotal
-            detalles.append(
-                {
-                    "producto_id": prod["id"],
-                    "nombre_producto": prod["nombre"],
-                    "cantidad": item.cantidad,
-                    "costo_unitario": item.costo_unitario,
-                }
-            )
-
+        detalles, total = _validar_items_compra(conn, data)
         cur = conn.execute(
             "INSERT INTO compras (proveedor_id, total, notas) VALUES (?, ?, ?)",
             (data.proveedor_id, total, data.notas.strip() if data.notas else None),
         )
         compra_id = cur.lastrowid
-        conn.executemany(
-            """
-            INSERT INTO compra_detalles (compra_id, producto_id, nombre_producto, cantidad, costo_unitario)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            [
-                (compra_id, d["producto_id"], d["nombre_producto"], d["cantidad"], d["costo_unitario"])
-                for d in detalles
-            ],
-        )
-        for d in detalles:
-            conn.execute(
-                "UPDATE productos SET stock_actual = COALESCE(stock_actual, 0) + ? WHERE id = ?",
-                (d["cantidad"], d["producto_id"]),
-            )
+        _insertar_detalles_compra(conn, compra_id, detalles)
+        _sumar_stock_compra(conn, detalles)
         conn.commit()
         return {
             "id": compra_id,
@@ -889,13 +1120,61 @@ def crear_compra(data: CompraIn):
         conn.close()
 
 
+@app.put("/api/compras/{compra_id}")
+def editar_compra(compra_id: int, data: CompraIn):
+    if not data.items:
+        raise HTTPException(400, "La compra debe tener al menos un producto")
+    conn = get_connection()
+    try:
+        compra = conn.execute("SELECT id FROM compras WHERE id = ?", (compra_id,)).fetchone()
+        if not compra:
+            raise HTTPException(404, "Compra no encontrada")
+
+        proveedor = None
+        if data.proveedor_id:
+            proveedor = conn.execute(
+                "SELECT id, nombre FROM proveedores WHERE id = ? AND activo = 1",
+                (data.proveedor_id,),
+            ).fetchone()
+            if not proveedor:
+                raise HTTPException(400, "El proveedor no existe o está inactivo")
+
+        _revertir_compra(conn, compra_id)
+        detalles, total = _validar_items_compra(conn, data)
+        conn.execute(
+            "UPDATE compras SET proveedor_id = ?, total = ?, notas = ? WHERE id = ?",
+            (data.proveedor_id, total, data.notas.strip() if data.notas else None, compra_id),
+        )
+        _insertar_detalles_compra(conn, compra_id, detalles)
+        _sumar_stock_compra(conn, detalles)
+        conn.commit()
+        return {"id": compra_id, "total": total}
+    finally:
+        conn.close()
+
+
+@app.delete("/api/compras/{compra_id}")
+def eliminar_compra(compra_id: int):
+    conn = get_connection()
+    try:
+        compra = conn.execute("SELECT id FROM compras WHERE id = ?", (compra_id,)).fetchone()
+        if not compra:
+            raise HTTPException(404, "Compra no encontrada")
+        _revertir_compra(conn, compra_id)
+        conn.execute("DELETE FROM compras WHERE id = ?", (compra_id,))
+        conn.commit()
+        return {"id": compra_id, "eliminado": True}
+    finally:
+        conn.close()
+
+
 @app.get("/api/compras")
 def listar_compras(desde: Optional[str] = None, hasta: Optional[str] = None,
                    limite: int = 100, offset: int = 0):
     conn = get_connection()
     try:
         sql = """
-            SELECT co.id, co.total, co.notas, co.creado_en, pr.nombre AS proveedor
+            SELECT co.id, co.total, co.notas, co.creado_en, co.proveedor_id, pr.nombre AS proveedor
             FROM compras co
             LEFT JOIN proveedores pr ON pr.id = co.proveedor_id
             WHERE 1 = 1
@@ -908,13 +1187,13 @@ def listar_compras(desde: Optional[str] = None, hasta: Optional[str] = None,
             sql += " AND date(co.creado_en) <= ?"
             params.append(hasta)
         sql += " ORDER BY co.id DESC LIMIT ? OFFSET ?"
-        params.extend([max(1, min(limite, 500)), max(0, offset)])
+        params.extend([max(1, min(limite, 5000)), max(0, offset)])
         compras = [dict(r) for r in conn.execute(sql, params).fetchall()]
         for co in compras:
             co["detalles"] = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT nombre_producto, cantidad, costo_unitario FROM compra_detalles WHERE compra_id = ?",
+                    "SELECT producto_id, nombre_producto, cantidad, costo_unitario FROM compra_detalles WHERE compra_id = ?",
                     (co["id"],),
                 ).fetchall()
             ]
@@ -940,6 +1219,11 @@ def _resumen_caja(conn, fecha: str) -> dict:
     r["cobros_fiado"] = conn.execute(
         "SELECT COALESCE(SUM(monto), 0) FROM pagos_fiado "
         "WHERE date(creado_en) = ?",
+        (fecha,),
+    ).fetchone()[0]
+    r["cargas_saldo"] = conn.execute(
+        "SELECT COALESCE(SUM(monto), 0) FROM movimientos_saldo "
+        "WHERE monto > 0 AND date(creado_en) = ?",
         (fecha,),
     ).fetchone()[0]
     r["cantidad_ventas"] = conn.execute(
@@ -991,7 +1275,8 @@ def guardar_cierre(data: CierreIn):
 
         resumen = _resumen_caja(conn, fecha)
         esperado = round(
-            data.fondo_inicial + resumen["ventas_efectivo"] + resumen["cobros_fiado"], 2
+            data.fondo_inicial + resumen["ventas_efectivo"] + resumen["cobros_fiado"]
+            + resumen["cargas_saldo"], 2
         )
         diferencia = round(data.efectivo_contado - esperado, 2)
 
@@ -999,23 +1284,24 @@ def guardar_cierre(data: CierreIn):
             conn.execute(
                 """
                 UPDATE cierres SET fondo_inicial = ?, ventas_efectivo = ?, ventas_fiado = ?,
-                    cobros_fiado = ?, total_esperado = ?, efectivo_contado = ?, diferencia = ?, notas = ?
+                    cobros_fiado = ?, cargas_saldo = ?, total_esperado = ?, efectivo_contado = ?,
+                    diferencia = ?, notas = ?
                 WHERE fecha = ?
                 """,
                 (data.fondo_inicial, resumen["ventas_efectivo"], resumen["ventas_fiado"],
-                 resumen["cobros_fiado"], esperado, data.efectivo_contado, diferencia,
-                 data.notas.strip() if data.notas else None, fecha),
+                 resumen["cobros_fiado"], resumen["cargas_saldo"], esperado, data.efectivo_contado,
+                 diferencia, data.notas.strip() if data.notas else None, fecha),
             )
         else:
             conn.execute(
                 """
                 INSERT INTO cierres (fecha, fondo_inicial, ventas_efectivo, ventas_fiado,
-                    cobros_fiado, total_esperado, efectivo_contado, diferencia, notas)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    cobros_fiado, cargas_saldo, total_esperado, efectivo_contado, diferencia, notas)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (fecha, data.fondo_inicial, resumen["ventas_efectivo"], resumen["ventas_fiado"],
-                 resumen["cobros_fiado"], esperado, data.efectivo_contado, diferencia,
-                 data.notas.strip() if data.notas else None),
+                 resumen["cobros_fiado"], resumen["cargas_saldo"], esperado, data.efectivo_contado,
+                 diferencia, data.notas.strip() if data.notas else None),
             )
         conn.commit()
         cierre = conn.execute("SELECT * FROM cierres WHERE fecha = ?", (fecha,)).fetchone()
@@ -1146,3 +1432,4 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+

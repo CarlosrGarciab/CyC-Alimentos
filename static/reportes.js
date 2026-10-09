@@ -7,6 +7,7 @@ const $rangoInfo = document.getElementById("rango-info");
 
 let rangoActivo = "7";
 let charts = {};
+let ultimo = null;
 
 function toast(msg, tipo = "exito") {
   $toast.textContent = msg;
@@ -171,6 +172,7 @@ async function cargarReportes() {
   if (!r) return toast("Selecciona las fechas", "error");
 
   const data = await api(`/api/reportes?desde=${r.desde}&hasta=${r.hasta}`);
+  ultimo = data;
   $rangoInfo.textContent = `Mostrando ${r.desde === r.hasta ? "el " + r.desde : `del ${r.desde} al ${r.hasta}`}`;
 
   const k = data.kpis;
@@ -214,6 +216,58 @@ async function cargarReportes() {
   graficoHoras(data.por_hora);
 }
 
+// ---------- Exportar CSV ----------
+
+function descargarCSV(nombre, filas) {
+  const esc = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const contenido = "\uFEFF" + filas.map((f) => f.map(esc).join(";")).join("\r\n");
+  const blob = new Blob([contenido], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportar() {
+  if (!ultimo) return toast("No hay datos para exportar", "error");
+  const k = ultimo.kpis;
+  const filas = [];
+  filas.push(["Reporte", `${ultimo.desde} a ${ultimo.hasta}`]);
+  filas.push([]);
+  filas.push(["Resumen"]);
+  filas.push(["Total vendido", k.total_vendido]);
+  filas.push(["Cantidad de ventas", k.cantidad_ventas]);
+  filas.push(["Ticket promedio", k.ticket_promedio]);
+  filas.push(["Unidades vendidas", k.unidades_vendidas]);
+  filas.push(["Fiado generado", k.total_fiado]);
+  filas.push(["Cobros de fiado", k.total_cobros]);
+  filas.push([]);
+  filas.push(["Ventas por día"]);
+  filas.push(["Fecha", "Total", "Efectivo", "Fiado"]);
+  for (const d of ultimo.por_dia) filas.push([d.fecha, d.total, d.efectivo, d.fiado]);
+  filas.push([]);
+  filas.push(["Productos más vendidos"]);
+  filas.push(["Producto", "Unidades", "Total"]);
+  for (const p of ultimo.top_productos) filas.push([p.nombre, p.unidades, p.total]);
+  filas.push([]);
+  filas.push(["Ventas por categoría"]);
+  filas.push(["Categoría", "Total", "Unidades"]);
+  for (const c of ultimo.por_categoria) filas.push([c.categoria, c.total, c.unidades]);
+  filas.push([]);
+  filas.push(["Ventas por hora"]);
+  filas.push(["Hora", "Cantidad", "Total"]);
+  for (const h of ultimo.por_hora) filas.push([`${h.hora}:00`, h.cantidad, h.total]);
+  descargarCSV(`reporte_${ultimo.desde}_${ultimo.hasta}.csv`, filas);
+  toast("CSV exportado");
+}
+
 // ---------- Filtros ----------
 
 $tabs.addEventListener("click", (e) => {
@@ -226,6 +280,7 @@ $tabs.addEventListener("click", (e) => {
 });
 
 document.getElementById("btn-aplicar").onclick = () => cargarReportes();
+document.getElementById("btn-exportar").onclick = exportar;
 
 // ---------- Init ----------
 

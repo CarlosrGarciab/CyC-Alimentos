@@ -21,13 +21,14 @@
   </header>
   <main>
     <div class="card">
-      <div class="form-fila">
+      <div class="form-fila" style="justify-content: space-between; align-items: center;">
         <div class="tabs" id="tabs-rango" style="margin-bottom: 0;">
           <button class="tab" data-rango="hoy">Hoy</button>
           <button class="tab activo" data-rango="7">7 días</button>
           <button class="tab" data-rango="30">30 días</button>
           <button class="tab" data-rango="custom">Personalizado</button>
         </div>
+        <button id="btn-exportar" class="secundario">Exportar CSV</button>
       </div>
       <div class="form-fila" id="fechas-custom" hidden style="margin-top: 10px;">
         <label style="font-size: 0.85rem; color: var(--muted);">Desde

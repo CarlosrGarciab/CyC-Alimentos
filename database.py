@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS ventas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     total REAL NOT NULL,
     metodo_pago TEXT NOT NULL DEFAULT 'efectivo',
+    cliente_id INTEGER REFERENCES clientes(id),
     creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS clientes (
     curso TEXT,
     telefono TEXT,
     activo INTEGER NOT NULL DEFAULT 1,
+    saldo_favor REAL NOT NULL DEFAULT 0,
     creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -64,6 +66,15 @@ CREATE TABLE IF NOT EXISTS pagos_fiado (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     deuda_id INTEGER NOT NULL REFERENCES deudas(id),
     monto REAL NOT NULL,
+    creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS movimientos_saldo (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    venta_id INTEGER REFERENCES ventas(id),
+    monto REAL NOT NULL,
+    descripcion TEXT,
     creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -99,6 +110,7 @@ CREATE TABLE IF NOT EXISTS cierres (
     ventas_efectivo REAL NOT NULL,
     ventas_fiado REAL NOT NULL,
     cobros_fiado REAL NOT NULL,
+    cargas_saldo REAL NOT NULL DEFAULT 0,
     total_esperado REAL NOT NULL,
     efectivo_contado REAL NOT NULL,
     diferencia REAL NOT NULL,
@@ -153,6 +165,18 @@ def init_db() -> None:
                 conn.execute("ALTER TABLE productos DROP COLUMN costo")
             except Exception:
                 pass
+
+        columnas_cli = [r[1] for r in conn.execute("PRAGMA table_info(clientes)").fetchall()]
+        if "saldo_favor" not in columnas_cli:
+            conn.execute("ALTER TABLE clientes ADD COLUMN saldo_favor REAL NOT NULL DEFAULT 0")
+
+        columnas_ventas = [r[1] for r in conn.execute("PRAGMA table_info(ventas)").fetchall()]
+        if "cliente_id" not in columnas_ventas:
+            conn.execute("ALTER TABLE ventas ADD COLUMN cliente_id INTEGER REFERENCES clientes(id)")
+
+        columnas_cierres = [r[1] for r in conn.execute("PRAGMA table_info(cierres)").fetchall()]
+        if "cargas_saldo" not in columnas_cierres:
+            conn.execute("ALTER TABLE cierres ADD COLUMN cargas_saldo REAL NOT NULL DEFAULT 0")
         conn.commit()
     finally:
         conn.close()

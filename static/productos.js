@@ -284,7 +284,13 @@ async function cargarProductos() {
 
   for (const p of prods) {
     const tr = document.createElement("tr");
-    tr.className = editandoProdId === p.id ? "editando" : "";
+    if (editandoProdId === p.id) {
+      tr.className = "editando";
+    } else {
+      const est = estadoStock(p);
+      if (est.clase === "bajo") tr.className = "fila-bajo";
+      else if (est.clase === "agotado") tr.className = "fila-agotado";
+    }
 
     // Producto (nombre + proveedor al editar)
     const tdNombre = document.createElement("td");

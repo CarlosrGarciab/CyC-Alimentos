@@ -43,7 +43,10 @@
         </label>
         <button id="btn-aplicar">Aplicar</button>
       </div>
-      <p id="resumen-info" style="color: var(--muted); font-size: 0.85rem; margin: 10px 0 0;"></p>
+      <div class="form-fila" style="justify-content: space-between; align-items: center;">
+        <p id="resumen-info" style="color: var(--muted); font-size: 0.85rem; margin: 10px 0 0;"></p>
+        <button id="btn-exportar" class="secundario" style="margin-top: 10px;">Exportar CSV</button>
+      </div>
     </div>
 
     <div class="card">
@@ -54,6 +57,7 @@
     </div>
   </main>
 
+  <div id="modal"></div>
   <div id="toast" class="toast"></div>
   <script src="/static/historial.js"></script>
 </body>

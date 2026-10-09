@@ -17,6 +17,7 @@ function toast(msg, tipo = "exito") {
 
 async function api(url, options = {}) {
   const res = await fetch(url, {
+    cache: "no-store",
     headers: { "Content-Type": "application/json" },
     ...options,
   });
@@ -28,7 +29,15 @@ async function api(url, options = {}) {
 }
 
 function fmtPrecio(n) {
-  return MONEDA + " " + Number(n).toLocaleString("es", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return MONEDA + " " + Number(n ?? 0).toLocaleString("es", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function costoBase(productoId) {
+  const p = productos.find((x) => x.id === productoId);
+  if (p && p.ultimo_costo != null) return p.ultimo_costo;
+  const inv = (typeof invCompleto !== "undefined" ? invCompleto : []).find((x) => x.id === productoId);
+  if (inv && inv.ultimo_costo != null) return inv.ultimo_costo;
+  return 0;
 }
 
 function btnAccion(texto, clase, onClick) {
@@ -90,7 +99,12 @@ function renderItemsCompra() {
       sel.appendChild(opt);
     }
     sel.value = item.producto_id;
-    sel.onchange = () => { item.producto_id = Number(sel.value); };
+    sel.onchange = () => {
+      item.producto_id = Number(sel.value);
+      item.costo_unitario = costoBase(item.producto_id);
+      costo.value = item.costo_unitario;
+      actualizarTotalCompra();
+    };
 
     const cant = document.createElement("input");
     cant.type = "number";
@@ -104,7 +118,7 @@ function renderItemsCompra() {
     costo.min = "0";
     costo.step = "0.01";
     costo.placeholder = "Costo unit.";
-    costo.value = item.costo_unitario || "";
+    costo.value = item.costo_unitario;
     costo.oninput = () => { item.costo_unitario = Number(costo.value) || 0; actualizarTotalCompra(); };
 
     const quitar = btnAccion("×", "peligro chico", () => {
@@ -122,7 +136,8 @@ function renderItemsCompra() {
 document.getElementById("btn-agregar-item").onclick = () => {
   const disponibles = productosDelProveedor();
   if (!disponibles.length) return toast("No hay productos cargados", "error");
-  itemsCompra.push({ producto_id: disponibles[0].id, cantidad: 1, costo_unitario: 0 });
+  const pid = disponibles[0].id;
+  itemsCompra.push({ producto_id: pid, cantidad: 1, costo_unitario: costoBase(pid) });
   renderItemsCompra();
 };
 
@@ -192,6 +207,8 @@ function renderInventario() {
 
   for (const p of visibles) {
     const tr = document.createElement("tr");
+    if (p.estado === "bajo") tr.className = "fila-bajo";
+    else if (p.estado === "agotado") tr.className = "fila-agotado";
 
     const tdNombre = document.createElement("td");
     tdNombre.textContent = p.nombre;

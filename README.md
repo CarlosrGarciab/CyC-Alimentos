@@ -6,18 +6,23 @@ inventario con proveedores, caja con cierre diario, reportes con gráficos e his
 ## Funcionalidades
 
 - **Venta**: grilla de productos por categoría, buscador, modo de venta rápida
-  (un clic = una venta), carrito, cobro en efectivo y fiado.
+  (un clic = una venta), carrito, cobro en efectivo, fiado y saldo a favor.
 - **Productos**: alta/edición/desactivación de productos y categorías, fotos,
   control de stock opcional (stock actual y mínimo).
-- **Clientes / Fiado**: clientes con tipo (estudiante/profesor) y curso, deuda
-  pendiente, cobros con pagos parciales (FIFO a las deudas más antiguas).
+- **Clientes / Fiado / Saldo a favor**: clientes con tipo (estudiante/profesor) y
+  curso. Fiado con deuda pendiente y cobros parciales (FIFO a las deudas más
+  antiguas). Saldo a favor prepago: se carga dinero a un cliente (ej. un padre
+  adelanta el mes) y las ventas descuentan de ese saldo.
 - **Inventario / Proveedores**: registro de compras (suman stock), asociación de
   productos a proveedores, alertas de stock bajo/agotado y último costo por producto.
-- **Caja**: resumen del día, arqueo y cierre diario (fondo inicial, efectivo
-  contado y diferencia).
+- **Caja**: resumen del día, arqueo y cierre diario (fondo inicial, ventas en
+  efectivo, cobros de fiado, cargas de saldo, efectivo contado y diferencia).
 - **Reportes**: KPIs y gráficos de ventas por día, productos más vendidos,
   ventas por categoría y horas pico (Chart.js local, funciona sin internet).
-- **Historial**: listado completo de ventas y compras por rango de fechas, con paginación.
+- **Historial**: listado completo de ventas y compras por rango de fechas, con
+  paginación, edición y eliminación de movimientos (revierte stock, deuda y saldo)
+  y exportación a CSV.
+- **Exportación**: Reportes e Historial se pueden descargar en CSV (abre en Excel).
 
 ## Requisitos
 
